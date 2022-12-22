@@ -37,7 +37,18 @@
 #endif
 
 namespace Slic3r {
-
+#if _DEBUG
+struct LoopAssertVisitor : public ExtrusionVisitorRecursiveConst {
+    virtual void default_use(const ExtrusionEntity& entity) override {};
+    virtual void use(const ExtrusionLoop& loop) override {
+        for (auto it = std::next(loop.paths.begin()); it != loop.paths.end(); ++it) {
+            assert(it->polyline.points.size() >= 2);
+            assert(std::prev(it)->polyline.last_point() == it->polyline.first_point());
+        }
+        assert(loop.paths.front().first_point() == loop.paths.back().last_point());
+    }
+};
+#endif
 PerimeterGeneratorLoops get_all_Childs(PerimeterGeneratorLoop loop) {
     PerimeterGeneratorLoops ret;
     for (PerimeterGeneratorLoop &child : loop.children) {
@@ -1349,7 +1360,7 @@ ProcessSurfaceResult PerimeterGenerator::process_classic(int& loop_number, const
                             contours.emplace_back();
                             holes.emplace_back();
                         }
-                        //Add the new periemter
+                        //Add the new perimeter
                         contours[contours_size].emplace_back(contour_expolygon.front().contour, contours_size, true, has_steep_overhang, fuzzify_gapfill);
                         //create the new gapfills
                         ExPolygons gapfill_area = offset_ex(Polygons{ expoly.contour }, -(float)(perimeter_spacing));
@@ -1454,6 +1465,9 @@ ProcessSurfaceResult PerimeterGenerator::process_classic(int& loop_number, const
                 peri_entities = this->_traverse_loops(contours.front(), thin_walls_thickpolys);
             }
         }
+#if _DEBUG
+        peri_entities.visit(LoopAssertVisitor{});
+#endif
         //{
         //    static int aodfjiaqsdz = 0;
         //    std::stringstream stri;
@@ -1538,6 +1552,9 @@ ProcessSurfaceResult PerimeterGenerator::process_classic(int& loop_number, const
             this->loops->append(peri_entities);
         }
     } // for each loop of an island
+#if _DEBUG
+    this->loops->visit(LoopAssertVisitor{});
+#endif
 
     // fill gaps
     ExPolygons gaps_ex;
@@ -2354,7 +2371,7 @@ static void fuzzy_paths(ExtrusionPaths& paths, coordf_t fuzzy_skin_thickness, co
 }
 
 ExtrusionEntityCollection PerimeterGenerator::_traverse_loops(
-    const PerimeterGeneratorLoops &loops, ThickPolylines &thin_walls) const
+    const PerimeterGeneratorLoops &loops, ThickPolylines &thin_walls, int count_since_overhang /*= 0*/) const
 {
     // loops is an arrayref of ::Loop objects
     // turn each one into an ExtrusionLoop object
@@ -2386,11 +2403,11 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_loops(
         // detect overhanging/bridging perimeters
         ExtrusionPaths paths;
 
-        bool is_overhang = this->config->overhangs_width_speed.value > 0
+        bool can_overhang = this->config->overhangs_width_speed.value > 0
             && this->layer->id() > object_config->raft_layers;
         if(this->object_config->support_material && this->object_config->support_material_contact_distance_type.value == zdNone)
-            is_overhang = false;
-        if (is_overhang) {
+            can_overhang = false;
+        if (can_overhang) {
             paths = this->create_overhangs(loop.polygon.split_at_first_point(), role, is_external);
         } else {
             ExtrusionPath path(role);
@@ -2462,10 +2479,28 @@ ExtrusionEntityCollection PerimeterGenerator::_traverse_loops(
             }
         } else {
             const PerimeterGeneratorLoop &loop = loops[idx.first];
+            ExtrusionLoop* eloop = static_cast<ExtrusionLoop*>(coll[idx.first]);
+            bool has_overhang = false;
+            if (this->config->overhangs_speed_enforce.value > 0) {
+                for (const ExtrusionPath& path : eloop->paths) {
+                    if (path.role() == erOverhangPerimeter) {
+                        has_overhang = true;
+                        break;
+                    }
+                }
+                if (has_overhang || this->config->overhangs_speed_enforce.value > count_since_overhang) {
+                    //enforce
+                    for (ExtrusionPath& path : eloop->paths) {
+                        if (path.role() == erPerimeter || path.role() == erExternalPerimeter) {
+                            path.set_role(erOverhangPerimeter);
+                        }
+                    }
+                }
+
+            }
             assert(thin_walls.empty());
-            ExtrusionEntityCollection children = this->_traverse_loops(loop.children, thin_walls);
+            ExtrusionEntityCollection children = this->_traverse_loops(loop.children, thin_walls, has_overhang ? 1 : (count_since_overhang+1));
             coll_out.set_entities().reserve(coll_out.entities().size() + children.entities().size() + 1);
-            ExtrusionLoop *eloop = static_cast<ExtrusionLoop*>(coll[idx.first]);
             coll[idx.first] = nullptr;
             if (loop.is_contour) {
                 //note: this->layer->id() % 2 == 1 already taken into account in the is_steep_overhang compute (to save time).
@@ -2643,7 +2678,27 @@ void PerimeterGenerator::_merge_thin_walls(ExtrusionEntityCollection &extrusions
     public:
         float percent_extrusion;
         std::vector<ExtrusionPath> paths;
+        Point* first_point = nullptr;
+        coordf_t resolution_sqr;
         virtual void use(ExtrusionPath &path) override {
+            //ensure the loop is continue.
+            if (first_point != nullptr) {
+                if (*first_point != path.first_point()) {
+                    if (first_point->distance_to_square(path.first_point()) < resolution_sqr) {
+                        path.polyline.points[0] = *first_point;
+                    } else {
+                        //add travel
+                        ExtrusionPath travel(path.role());
+                        travel.width = path.width;
+                        travel.height = path.height;
+                        travel.mm3_per_mm = 0;
+                        travel.polyline.points.push_back(*first_point);
+                        travel.polyline.points.push_back(path.first_point());
+                        paths.push_back(travel);
+                    }
+                }
+                first_point = nullptr;
+            }
             path.mm3_per_mm *= percent_extrusion;
             path.width *= percent_extrusion;
             paths.push_back(path);
@@ -2744,6 +2799,9 @@ void PerimeterGenerator::_merge_thin_walls(ExtrusionEntityCollection &extrusions
         //now insert thin wall if it has a point
         //it found a segment
         if (searcher.search_result.path != nullptr) {
+#if _DEBUG
+            searcher.search_result.loop->visit(LoopAssertVisitor{});
+#endif
             if (!searcher.search_result.from_start)
                 tw.reverse();
             //get the point
@@ -2764,20 +2822,25 @@ void PerimeterGenerator::_merge_thin_walls(ExtrusionEntityCollection &extrusions
             //create thin wall path exttrusion
             ExtrusionEntityCollection tws;
             tws.append(Geometry::thin_variable_width({ tw }, erThinWall, this->ext_perimeter_flow, std::max(ext_perimeter_flow.scaled_width() / 4, scale_t(this->print_config->resolution))));
+            assert(!tws.entities().empty());
             ChangeFlow change_flow;
             if (tws.entities().size() == 1 && tws.entities()[0]->is_loop()) {
                 //loop, just add it 
+                change_flow.first_point = &point;
                 change_flow.percent_extrusion = 1;
                 change_flow.use(tws);
                 //add move back
-
                 searcher.search_result.loop->paths.insert(searcher.search_result.loop->paths.begin() + 1 + searcher.search_result.idx_path,
                     change_flow.paths.begin(), change_flow.paths.end());
                 //add move to
 
+#if _DEBUG
+                searcher.search_result.loop->visit(LoopAssertVisitor{});
+#endif
             } else {
                 //first add the return path
                 //ExtrusionEntityCollection tws_second = tws; // this does a deep copy
+                change_flow.first_point = &point;
                 change_flow.percent_extrusion = 0.1f;
                 change_flow.use(tws); // tws_second); //does not need the deep copy if the change_flow copy the content instead of re-using it.
                 //force reverse
@@ -2788,11 +2851,15 @@ void PerimeterGenerator::_merge_thin_walls(ExtrusionEntityCollection &extrusions
                 searcher.search_result.loop->paths.insert(searcher.search_result.loop->paths.begin() + 1 + searcher.search_result.idx_path,
                     change_flow.paths.begin(), change_flow.paths.end());
                 //add the real extrusion path
+                change_flow.first_point = &point;
                 change_flow.percent_extrusion = 9.f; // 0.9 but as we modified it by 0.1 just before, has to multiply by 10
                 change_flow.paths = std::vector<ExtrusionPath>();
                 change_flow.use(tws);
                 searcher.search_result.loop->paths.insert(searcher.search_result.loop->paths.begin() + 1 + searcher.search_result.idx_path,
                     change_flow.paths.begin(), change_flow.paths.end());
+#if _DEBUG
+                searcher.search_result.loop->visit(LoopAssertVisitor{});
+#endif
             }
         } else {
             not_added.push_back(tw);

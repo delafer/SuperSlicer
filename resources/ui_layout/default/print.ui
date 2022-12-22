@@ -58,6 +58,7 @@ group:label_width$12:Overhangs
 		setting:label$Bridge speed and fan:width$5:sidetext_width$0:overhangs_width_speed
 		setting:label_width$12:label$Bridge flow:width$5:overhangs_width
 	end_line
+	setting:overhangs_speed_enforce
 	line:Extrusion direction
 		setting:sidetext_width$2:overhangs_reverse
 		setting:label_width$12:width$5:overhangs_reverse_threshold
@@ -343,6 +344,9 @@ group:sidetext_width$7:Modifiers
 group:Autospeed (advanced)
 	setting:max_volumetric_speed
 	setting:max_print_speed
+group:Pressure equalizer (experimental)
+	setting:max_volumetric_extrusion_rate_slope_positive
+	setting:max_volumetric_extrusion_rate_slope_negative
 group:label_width$9:sidetext_width$8:Acceleration control (advanced)
 	line:Default acceleration
 		setting:width$4:default_acceleration

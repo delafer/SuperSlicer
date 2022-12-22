@@ -4,7 +4,9 @@
 [![Packaging status](https://repology.org/badge/tiny-repos/superslicer.svg)](https://repology.org/project/superslicer/versions) [![you can get this shield at shields.io](https://img.shields.io/chocolatey/v/superslicer)](https://community.chocolatey.org/packages/superslicer) [![you can get this shield at shields.io](https://img.shields.io/homebrew/cask/v/superslicer)](https://formulae.brew.sh/cask/superslicer) [![you can get this shield at shields.io](https://img.shields.io/aur/version/superslicer)](https://aur.archlinux.org/packages/superslicer)
 # SuperSlicer
 
-**A PrusaSlicer fork (which is a slic3r fork)** (previously Slic3r++)
+
+### A PrusaSlicer fork (which is a slic3r fork)** (previously Slic3r++)
+
 
 Prebuilt Windows, Linux and macOS 64-bit releases are available through the [git releases page](https://github.com/supermerill/SuperSlicer/releases). The Linux & macOS builds aren't tested (by me), just compiled, so please report any bugs that may occur during use.  
 For **installers**, check the badges above. Windows users can use chocolatey or scoop.  
