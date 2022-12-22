@@ -88,7 +88,7 @@ these documentation pages:
 
 You can also look at the workflow YAML-files for [git actions](https://github.com/supermerill/Slic3r/tree/master/.github/workflows), as they describe how to build from source from a "virgin" dev computer.
 
-### Can I help?
+### Can I help??
 
 Sure! You can do the following to find things that are available to help with:
 * Add an issue to the GitHub tracker **if it isn't already present**.
