@@ -5,7 +5,7 @@ We have automated builds for Windows (64-bit) and OSX (>= 10.7). [Get a fresh bu
 
 The MacOS X build server is kindly sponsored by: <img width=150 src=https://cloud.githubusercontent.com/assets/31754/22719818/09998c92-ed6d-11e6-9fa0-09de638f3a36.png />
 
-### So, what's this Slic3r?
+### So, what's this Slic3r?...
 
 Slic3r is mainly a **toolpath generator** for 3D printers: it reads 3D models (STL, OBJ, AMF, 3MF) and it converts them into **G-code** instructions for 3D printers. But it does much more than that, see the [features list](#features) below.
 
